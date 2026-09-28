@@ -1,0 +1,12 @@
+.venv/
+.python/
+.uv-cache/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.coverage
+htmlcov/
+.env
+.superpowers/
+.agents/
+.codex/
