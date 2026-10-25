@@ -842,6 +842,24 @@ def test_pagina_inicial_entrega_html():
     assert resposta.mimetype == "text/html"
 
 
+def test_pagina_entrega_estilos_e_scripts_referenciados():
+    """A View precisa carregar seus assets reais, com os tipos corretos."""
+    _, cliente, _ = cliente_http()
+    html = cliente.get("/").get_data(as_text=True)
+    estilos = re.findall(r'<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"', html)
+    scripts = re.findall(r'<script\b[^>]*src="([^"]+)"', html)
+    assert estilos, "A página deve referenciar sua folha de estilos."
+    assert scripts, "A página deve referenciar seu JavaScript."
+    for caminho in estilos + scripts:
+        resposta = cliente.get(caminho)
+        assert resposta.status_code == 200, caminho
+        assert resposta.data, caminho
+        tipos = {"text/css"} if caminho in estilos else {
+            "text/javascript", "application/javascript",
+        }
+        assert resposta.mimetype in tipos, caminho
+
+
 @pytest.mark.interface
 def test_interface_fluxos_desktop_e_mobile():
     """Verifica a interface real; instalação de Playwright/Chrome é opcional."""

@@ -7,6 +7,10 @@ A fonte única de verdade é [docs/specs/livraria.md](docs/specs/livraria.md),
 que contém as histórias, decisões de escopo, contrato HTTP e 33 cenários
 Gherkin. O plano está em [docs/specs/tasks.md](docs/specs/tasks.md).
 
+A aplicação utiliza **MVC**: o Model concentra dados e regras,
+o Controller recebe requisições e a View apresenta a interface. A separação e
+o fluxo de reserva estão em [Arquitetura MVC](docs/arquitetura.md).
+
 ## Executar neste workspace
 
 O ambiente virtual já está instalado. No PowerShell, dentro desta pasta:
@@ -72,7 +76,7 @@ Os exemplos de [lab05_tdd](https://github.com/Ckenz0/lab05_tdd) fundamentam
 os testes de filtragem e o contrato `filtrar_livros(livros, **criterios)`.
 Os exemplos de [lab05_bdd](https://github.com/Ckenz0/lab05_bdd) fundamentam
 os seis cenários iniciais e as classes `Catalogo` e `RepositorioLivros`.
-O BDD foi adaptado de Behave para pytest-bdd para respeitar a estrutura da atividade.
+Os cenários BDD foram adaptados de Behave para pytest-bdd.
 
 O pytest fica na versão 8, compatível com pytest-bdd 8. O aviso de
 depreciação de `maxsplit` do parser Gherkin no Python 3.13 é filtrado
@@ -84,16 +88,34 @@ especificamente em `pytest.ini`; os demais avisos permanecem habilitados.
 docs/specs/
   livraria.md
   tasks.md
+docs/
+  arquitetura.md
+  validacao-mvc.md
+models/
+  __init__.py
+  livraria.py
+  demonstracao.py
+controllers/
+  __init__.py
+  livraria_controller.py
 templates/
   index.html
-livraria.py
-app.py
+static/
+  css/app.css
+  js/app.js
+livraria.py             # compatibilidade com os exemplos anteriores
+app.py                  # configuração e inicialização
 test_livraria.py
 requirements.txt
 pytest.ini
 README.md
 .gitignore
 ```
+
+Os endereços HTTP e as regras de negócio foram preservados. `livraria.py` na
+raiz apenas reexporta os nomes públicos do Model para manter os exemplos e
+testes anteriores compatíveis. Os resultados da refatoração estão no
+[registro de validação](docs/validacao-mvc.md).
 
 ## Uso e limites da demonstração
 

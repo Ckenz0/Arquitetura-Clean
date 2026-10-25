@@ -90,7 +90,7 @@ Arquivos de apoio: `requirements.txt`, `.gitignore`, `README.md`.
 
 - Projeto iniciado em uma pasta vazia; sem repositório Git local detectável.
 - Implementação inicial feita no diretório solicitado, sem commits ou publicação.
-- Gherkin e plano ficam nos caminhos da atividade; nenhum arquivo de ferramenta
+- Gherkin e plano ficam em `docs/specs/`; nenhum arquivo de ferramenta
   de desenvolvimento integra a entrega.
 - Task 2: 10 testes falharam pela ausência do domínio e passaram após o catálogo.
 - Task 3: 37 testes novos falharam por métodos ausentes; a implementação passou

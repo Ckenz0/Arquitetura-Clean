@@ -6,12 +6,19 @@ livraria física. O aplicativo não realiza pagamentos ou vendas online.
 
 ## Arquitetura e limites
 
-- `livraria.py`: catálogo e regras dos seis épicos, independentes do Flask.
-- `app.py`: API JSON, sessão do cliente e entrega da página pelo Flask.
-- `templates/index.html`: interface responsiva em português, sem serviços externos.
+- `models/livraria.py`: Model com catálogo e regras dos seis épicos, sem Flask.
+- `models/demonstracao.py`: dados iniciais ilustrativos do Model.
+- `controllers/livraria_controller.py`: Controller com API JSON, sessão,
+  validação HTTP e entrega da página, registrado como Blueprint Flask.
+- `app.py`: configuração, composição e inicialização da aplicação.
+- `templates/index.html`, `static/css/app.css` e `static/js/app.js`: View
+  responsiva em português, sem serviços externos.
+- `livraria.py`: reexporta a interface pública do Model para compatibilidade
+  com os exemplos anteriores; não duplica as regras de negócio.
 - `test_livraria.py`: testes unitários, integração HTTP e cenários BDD extraídos
   diretamente do bloco Gherkin deste documento.
 - `docs/specs/tasks.md`: plano e registro da execução.
+- [Arquitetura MVC](../arquitetura.md): responsabilidades e fluxo da aplicação.
 - Python 3.10 ou superior; dependências declaradas em `requirements.txt`.
 - Os dados ficam em memória e são reiniciados com o servidor. O catálogo,
   compras, cupons, horários e eventos iniciais são exemplos demonstrativos.
