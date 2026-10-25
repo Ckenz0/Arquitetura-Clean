@@ -1,15 +1,23 @@
 # Entrelinhas — Livraria
 
-Aplicação Python/Flask para as 30 User Stories dos épicos E1–E6: descoberta
+Aplicação Python/Flask para as 31 User Stories dos épicos E1–E6: descoberta
 de livros, visita à loja, reservas, fidelidade, comunidade e preferências.
 
 A fonte única de verdade é [docs/specs/livraria.md](docs/specs/livraria.md),
-que contém as histórias, decisões de escopo, contrato HTTP e 33 cenários
-Gherkin. O plano está em [docs/specs/tasks.md](docs/specs/tasks.md).
+que contém as histórias, decisões de escopo, contrato HTTP e 36 cenários
+Gherkin. O histórico inicial está em [docs/specs/tasks.md](docs/specs/tasks.md).
 
-A aplicação utiliza **MVC**: o Model concentra dados e regras,
-o Controller recebe requisições e a View apresenta a interface. A separação e
-o fluxo de reserva estão em [Arquitetura MVC](docs/arquitetura.md).
+A aplicação utiliza **quatro camadas**: apresentação, aplicação, domínio e
+infraestrutura. A separação e o fluxo de publicação de avaliações estão em
+[Arquitetura multicamadas](docs/arquitetura.md).
+
+## Avaliações de livros
+
+Abra os detalhes de um livro, escolha uma nota de 1 a 5, escreva seu comentário
+e selecione **Publicar avaliação**. A publicação fica visível para outros leitores.
+Cada cliente, identificado pela sessão do navegador, pode publicar uma avaliação
+por livro; não há edição ou exclusão. Se o envio falhar, o formulário preserva
+o rascunho e mostra o erro para permitir uma nova tentativa.
 
 ## Executar neste workspace
 
@@ -58,7 +66,11 @@ Given/When/Then executam o domínio real com relógio fixo e dados isolados.
 Assim, editar um cenário na spec altera o BDD executado, sem uma cópia `.feature`.
 Cada cenário tem uma etiqueta correspondente à sua User Story.
 
-Os dois testes marcados `interface` usam um navegador real. São opcionais e
+`test_avaliacoes.py` verifica domínio, casos de uso, repositórios reais, HTTP,
+concorrência e fronteiras de dependência entre as camadas.
+`test_interface_avaliacoes.py` verifica o novo formulário em desktop e celular.
+
+Os quatro testes marcados `interface` usam um navegador real. São opcionais e
 ficam como ignorados quando Playwright ou o navegador não estiver instalado.
 Para executá-los com Chrome/Edge instalado:
 
@@ -90,32 +102,45 @@ docs/specs/
   tasks.md
 docs/
   arquitetura.md
+  validacao-multicamadas.md
   validacao-mvc.md
-models/
-  __init__.py
-  livraria.py
-  demonstracao.py
 controllers/
   __init__.py
   livraria_controller.py
+services/
+  __init__.py
+  livraria_service.py
+domain/
+  __init__.py
+  regras.py
+  avaliacao.py
+repositories/
+  __init__.py
+  livros.py
+  estado.py
 templates/
   index.html
 static/
   css/app.css
   js/app.js
-livraria.py             # compatibilidade com os exemplos anteriores
+models/                 # compatibilidade com os imports anteriores
+livraria.py              # compatibilidade com os exemplos anteriores
+demonstracao.py          # composição dos dados ilustrativos
 app.py                  # configuração e inicialização
 test_livraria.py
+test_avaliacoes.py
+test_interface_avaliacoes.py
 requirements.txt
 pytest.ini
 README.md
 .gitignore
 ```
 
-Os endereços HTTP e as regras de negócio foram preservados. `livraria.py` na
-raiz apenas reexporta os nomes públicos do Model para manter os exemplos e
-testes anteriores compatíveis. Os resultados da refatoração estão no
-[registro de validação](docs/validacao-mvc.md).
+Os endereços HTTP e as regras anteriores foram preservados, com uma nova rota
+para publicação de avaliações. `livraria.py` e `models/` reexportam os nomes
+públicos anteriores para manter os exemplos e testes compatíveis.
+Os resultados atuais estão no [registro de validação](docs/validacao-multicamadas.md).
+O arquivo `docs/validacao-mvc.md` registra a verificação histórica da versão MVC.
 
 ## Uso e limites da demonstração
 

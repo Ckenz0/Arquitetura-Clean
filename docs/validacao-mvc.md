@@ -1,4 +1,7 @@
-# Validação da refatoração MVC
+# Histórico da validação MVC
+
+Este registro corresponde à base MVC anterior à arquitetura multicamadas.
+A verificação atual está em [Validação multicamadas](validacao-multicamadas.md).
 
 Verificação local em 25/10/2026, com Python 3.12.15, Flask 3.1.3, pytest 8.4.2
 e pytest-bdd 8.1.0. Playwright instalado para executar os testes no navegador.
@@ -33,4 +36,4 @@ interface durante uma consulta pendente.
 
 O comportamento funcional e o contrato HTTP permanecem definidos em
 [livraria.md](specs/livraria.md). As responsabilidades estão descritas em
-[Arquitetura MVC](arquitetura.md).
+[Arquitetura da aplicação](arquitetura.md).

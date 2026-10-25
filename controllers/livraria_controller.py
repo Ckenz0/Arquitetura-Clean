@@ -1,4 +1,4 @@
-"""Controller: requisições HTTP, sessão e coordenação do Model e da View."""
+"""Apresentação HTTP: sessão, formato das requisições e respostas."""
 
 from datetime import timedelta
 from uuid import uuid4
@@ -6,11 +6,11 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, render_template, request, session
 from werkzeug.exceptions import HTTPException
 
-from models.livraria import ErroLivraria
+from domain.regras import ErroLivraria
 
 
 def registrar_controladores(app, *, demonstracao=False):
-    """Registra um Blueprint com o domínio próprio desta aplicação."""
+    """Registra um Blueprint com o serviço próprio desta aplicação."""
     loja = app.extensions["livraria"]
     blueprint = Blueprint("livraria", __name__)
 
@@ -72,7 +72,16 @@ def registrar_controladores(app, *, demonstracao=False):
 
     @blueprint.get("/api/livros/<livro_id>")
     def livro(livro_id):
-        return jsonify(loja.livro(livro_id))
+        return jsonify(loja.livro(livro_id, cliente()))
+
+    @blueprint.post("/api/livros/<livro_id>/avaliacoes")
+    def avaliar(livro_id):
+        corpo = dados("texto")
+        if set(corpo) - {"nota", "texto"}:
+            raise ErroLivraria("Envie apenas nota e texto da avaliação.")
+        return jsonify(loja.publicar_avaliacao(
+            cliente(), livro_id, corpo.get("nota"), corpo["texto"],
+        )), 201
 
     @blueprint.get("/api/codigo/<codigo>")
     def codigo(codigo):

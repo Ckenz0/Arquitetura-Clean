@@ -1,12 +1,8 @@
-"""Compatibilidade dos exemplos anteriores; o Model está em models.livraria."""
+"""Compatibilidade dos imports públicos anteriores da livraria."""
 
-from models.livraria import (
-    Catalogo,
-    ErroLivraria,
-    Livraria,
-    RepositorioLivros,
-    filtrar_livros,
-)
+from domain.regras import ErroLivraria, filtrar_livros
+from repositories import RepositorioLivros
+from services import Catalogo, Livraria
 
 __all__ = [
     "Catalogo", "ErroLivraria", "Livraria", "RepositorioLivros", "filtrar_livros",

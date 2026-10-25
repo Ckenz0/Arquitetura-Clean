@@ -715,6 +715,41 @@ def embrulho_especial(contexto):
     assert contexto["reserva"]["embrulho"] is True
 
 
+@when(parsers.parse('eu avaliar "{titulo}" com nota {nota:d} e comentário "{texto}"'))
+def publicar_avaliacao_bdd(contexto, titulo, nota, texto):
+    contexto.pop("erro_avaliacao", None)
+    try:
+        contexto["avaliacao"] = contexto["loja"].publicar_avaliacao(
+            contexto["cliente"], id_por_titulo(contexto, titulo), nota, texto,
+        )
+    except import_module("livraria").ErroLivraria as erro:
+        contexto["erro_avaliacao"] = erro
+
+
+@then(parsers.parse('outra cliente deve ver minha avaliação de "{titulo}" com nota {nota:d}'))
+def avaliacao_visivel_bdd(contexto, titulo, nota):
+    livro = contexto["loja"].livro(id_por_titulo(contexto, titulo), "bia")
+    assert livro["avaliacoes"][-1] == contexto["avaliacao"]
+    assert livro["avaliacoes"][-1]["nota"] == nota
+    assert livro["ja_avaliou"] is False
+
+
+@then(parsers.parse("a avaliação deve ser recusada com status {status:d}"))
+def avaliacao_recusada_bdd(contexto, status):
+    assert contexto["erro_avaliacao"].status == status
+
+
+@then(parsers.parse('não deve existir uma avaliação minha de "{titulo}"'))
+def sem_avaliacao_bdd(contexto, titulo):
+    assert contexto["loja"].livro(id_por_titulo(contexto, titulo), contexto["cliente"])["ja_avaliou"] is False
+
+
+@then(parsers.parse('deve existir apenas uma nova avaliação de "{titulo}"'))
+def avaliacao_unica_bdd(contexto, titulo):
+    livro = contexto["loja"].livro(id_por_titulo(contexto, titulo))
+    assert [a for a in livro["avaliacoes"] if "nota" in a] == [contexto["avaliacao"]]
+
+
 def cliente_http():
     loja = nova_livraria()
     app = import_module("app").create_app(loja)

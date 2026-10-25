@@ -1,5 +1,9 @@
 # Plano de implementação da livraria
 
+Este documento registra a implementação inicial. A organização atual está em
+[Arquitetura multicamadas](../arquitetura.md), e a validação da evolução está em
+[Validação multicamadas](../validacao-multicamadas.md).
+
 Objetivo: entregar as 30 User Stories e seus critérios de aceite usando
 exclusivamente [livraria.md](livraria.md) como especificação funcional.
 
@@ -9,7 +13,7 @@ O Gherkin executado é extraído da especificação, sem cópia mantida à parte
 
 ## Restrições globais
 
-- Preservar a estrutura de arquivos solicitada.
+- Preservar a organização de arquivos descrita neste registro.
 - Não calcular taxas de pontos, antecedências ou limites comerciais ausentes.
 - Não incluir arquivos de ferramentas de desenvolvimento no repositório.
 - Não disponibilizar operações da loja como ações de clientes.

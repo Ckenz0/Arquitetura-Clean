@@ -1,4 +1,4 @@
-"""Configura e conecta Model, View e Controller da livraria."""
+"""Configura e conecta as camadas da aplicação da livraria."""
 
 import os
 import secrets
@@ -6,7 +6,7 @@ import secrets
 from flask import Flask
 
 from controllers import registrar_controladores
-from models.demonstracao import criar_demonstracao
+from demonstracao import criar_demonstracao
 
 
 def create_app(livraria=None):

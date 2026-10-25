@@ -127,10 +127,30 @@ function renderizar() {
   $('#notificacoes').innerHTML = estado.notificacoes.length ? [...estado.notificacoes].reverse().map(n => `<article class="list-item"><span class="label">${esc(n.tema)} · ${esc(data(n.data))}</span><p style="margin:8px 0 0">${esc(n.mensagem)}</p></article>`).join('') : vazio('Nenhuma notificação por enquanto.');
 }
 
+function htmlAvaliacao(avaliacao) {
+  return `<div class="opinion"><span class="label">${esc(avaliacao.cliente)}</span>${Number.isInteger(avaliacao.nota) ? `<strong class="review-rating">Nota ${esc(avaliacao.nota)} de 5</strong>` : ''}<p>${esc(avaliacao.texto)}</p></div>`;
+}
+
+function htmlConfirmacaoAvaliacao() {
+  return '<p id="avaliacao-confirmacao" role="status" tabindex="-1">Você já publicou uma avaliação deste livro. Obrigado por compartilhar sua leitura.</p>';
+}
+
 async function abrirLivro(id) {
   const l = await api(`/api/livros/${encodeURIComponent(id)}`);
-  $('#book-details').innerHTML = `<div class="dialog-heading"><div><div class="eyebrow">${esc(l.genero)}</div><h2 id="book-title">${esc(l.titulo)}</h2></div><button class="close" data-close aria-label="Fechar">×</button></div><p class="subtle">${esc(l.autor)}</p><p>${esc(l.sinopse || 'Sinopse não informada.')}</p><div class="details-grid"><div><span class="label">Preço na loja</span><strong>${dinheiro(l.preco)}</strong></div><div><span class="label">Disponibilidade</span><strong>${l.estoque} exemplares</strong></div><div><span class="label">Seção</span><strong>${esc(l.secao || 'Não informada')}</strong></div><div><span class="label">Prateleira</span><strong>${esc(l.prateleira || 'Não informada')}</strong></div></div><h3>Quem leu, conta</h3>${l.avaliacoes?.length ? l.avaliacoes.map(a => `<div class="opinion"><span class="label">${esc(a.cliente)}</span><p>${esc(a.texto)}</p></div>`).join('') : '<p class="subtle">Este livro ainda não tem avaliações.</p>'}<div class="details-actions"><button class="btn" data-action="${l.estoque ? 'reservar' : 'acompanhar'}" data-id="${esc(l.id)}">${l.estoque ? 'Reservar para retirada' : 'Avise-me quando chegar'}</button><button class="btn secondary" data-action="desejo" data-id="${esc(l.id)}">♡ Guardar</button></div>`;
-  $('#book-dialog').showModal();
+  const avaliacoes = l.avaliacoes?.length
+    ? l.avaliacoes.map(htmlAvaliacao).join('')
+    : '<p class="subtle review-empty">Este livro ainda não tem avaliações.</p>';
+  const formulario = l.ja_avaliou
+    ? htmlConfirmacaoAvaliacao()
+    : `<form id="avaliacao-form" data-id="${esc(l.id)}">
+        <p class="subtle" id="avaliacao-ajuda">Sua avaliação será pública e não poderá ser editada.</p>
+        <div class="field"><label for="avaliacao-nota">Sua nota</label><select id="avaliacao-nota" name="nota" required><option value="">Escolha de 1 a 5</option>${[1,2,3,4,5].map(n => `<option value="${n}">${n} de 5</option>`).join('')}</select></div>
+        <div class="field"><label for="avaliacao-texto">Seu comentário</label><textarea id="avaliacao-texto" name="texto" rows="4" required aria-describedby="avaliacao-ajuda" placeholder="O que você achou desta leitura?"></textarea></div>
+        <p id="avaliacao-erro" class="form-error" role="alert" tabindex="-1" hidden></p>
+        <button type="submit" class="btn">Publicar avaliação</button>
+      </form>`;
+  $('#book-details').innerHTML = `<div class="dialog-heading"><div><div class="eyebrow">${esc(l.genero)}</div><h2 id="book-title">${esc(l.titulo)}</h2></div><button class="close" data-close aria-label="Fechar">×</button></div><p class="subtle">${esc(l.autor)}</p><p>${esc(l.sinopse || 'Sinopse não informada.')}</p><div class="details-grid"><div><span class="label">Preço na loja</span><strong>${dinheiro(l.preco)}</strong></div><div><span class="label">Disponibilidade</span><strong>${l.estoque} exemplares</strong></div><div><span class="label">Seção</span><strong>${esc(l.secao || 'Não informada')}</strong></div><div><span class="label">Prateleira</span><strong>${esc(l.prateleira || 'Não informada')}</strong></div></div><h3>Quem leu, conta</h3><div id="book-reviews">${avaliacoes}</div><div class="details-actions"><button class="btn" data-action="${l.estoque ? 'reservar' : 'acompanhar'}" data-id="${esc(l.id)}">${l.estoque ? 'Reservar para retirada' : 'Avise-me quando chegar'}</button><button class="btn secondary" data-action="desejo" data-id="${esc(l.id)}">♡ Guardar</button></div><section class="review-section" aria-label="Sua avaliação"><h3>Sua avaliação</h3>${formulario}</section>`;
+  if (!$('#book-dialog').open) $('#book-dialog').showModal();
 }
 
 function abrirReserva(id) {
@@ -218,7 +238,28 @@ document.addEventListener('submit', event => {
   if (form.id === 'filtros') { renderizarCatalogo(); return; }
   executar(form.querySelector('button[type="submit"]'), async () => {
     const values = new FormData(form);
-    if (form.id === 'reserve-form') {
+    if (form.id === 'avaliacao-form') {
+      const erroPublicacao = $('#avaliacao-erro');
+      erroPublicacao.hidden = true;
+      let publicada;
+      try {
+        publicada = await api(`/api/livros/${encodeURIComponent(form.dataset.id)}/avaliacoes`, 'POST', {
+          nota:Number(values.get('nota')), texto:values.get('texto')
+        });
+      } catch (erro) {
+        erroPublicacao.textContent = erro.message || 'Não foi possível publicar. Tente novamente.';
+        erroPublicacao.hidden = false;
+        erroPublicacao.focus();
+        return;
+      }
+      const listaAvaliacoes = $('#book-reviews');
+      listaAvaliacoes.querySelector('.review-empty')?.remove();
+      listaAvaliacoes.insertAdjacentHTML('beforeend', htmlAvaliacao(publicada));
+      form.outerHTML = htmlConfirmacaoAvaliacao();
+      $('#avaliacao-confirmacao').focus();
+      await atualizar();
+      return;
+    } else if (form.id === 'reserve-form') {
       await api('/api/reservas', 'POST', {livro_id:values.get('livro_id'), prazo:new Date(values.get('prazo')).toISOString(), embrulho:$('#reserve-gift').checked});
       $('#reserve-dialog').close(); trocarAba('visita'); avisar('Livro reservado. Acompanhe a preparação por aqui.');
     } else if (form.id === 'deadline-form') {

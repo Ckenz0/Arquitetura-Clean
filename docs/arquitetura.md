@@ -1,67 +1,82 @@
-# Arquitetura MVC — Livraria Entrelinhas
+# Arquitetura multicamadas — Livraria Entrelinhas
 
-A aplicação separa as responsabilidades de Model, View e Controller.
-Ela consiste em um único programa Flask, com
-frontend funcional e dados em memória.
+A aplicação separa apresentação, aplicação, domínio e infraestrutura em quatro
+camadas lógicas. Ela é executada como um único programa Flask, com frontend
+funcional e armazenamento em memória.
 
 ## Responsabilidades
 
-| Parte | Arquivos | Responsabilidade |
+| Camada | Arquivos | Responsabilidade |
 | --- | --- | --- |
-| Model | `models/livraria.py` | Catálogo, estoque, reservas, fidelidade, comunidade e preferências; dados e regras independentes do Flask. |
-| Dados demonstrativos | `models/demonstracao.py` | Criação do catálogo, horários, eventos e clube ilustrativos. |
-| View | `templates/index.html`, `static/css/app.css`, `static/js/app.js` | Apresentação, captura de ações, requisições HTTP e atualização da interface. |
-| Controller | `controllers/livraria_controller.py` | Rotas, sessão do cliente, validação do formato da requisição, chamadas ao Model e respostas HTML/JSON. |
-| Inicialização | `app.py` | Configura o Flask, cria o Model e registra o Blueprint do Controller. |
-| Compatibilidade | `livraria.py` | Reexporta classes e função públicas do Model para os exemplos e testes anteriores. |
+| Apresentação | `controllers/livraria_controller.py`, `templates/index.html`, `static/css/app.css`, `static/js/app.js` | Receber HTTP, identificar a sessão, validar o formato das requisições, apresentar dados e capturar ações. |
+| Aplicação | `services/livraria_service.py` | Coordenar os casos de uso: buscar livros, reservar, participar de eventos e publicar avaliações; proteger operações compostas com o mesmo lock do estado. |
+| Domínio | `domain/regras.py`, `domain/avaliacao.py` | Aplicar regras e validações de datas, quantidades, disponibilidade para reserva, preferências, nota e comentário. |
+| Infraestrutura/dados | `repositories/livros.py`, `repositories/estado.py` | Armazenar livros e estado, consultar e salvar registros e manter a autoria interna das avaliações. |
 
-O Model concentra as validações de negócio, como disponibilidade de estoque e
-validade do prazo de uma reserva. O Controller valida o formato HTTP, como
-corpo JSON e presença de campos obrigatórios. A View apresenta os resultados
-e permite que o cliente execute as ações disponíveis.
+`app.py` configura o Flask e conecta a apresentação ao serviço.
+`demonstracao.py` compõe o serviço com os repositórios em memória e os dados
+iniciais ilustrativos. `livraria.py` e `models/` são módulos de compatibilidade
+com os imports anteriores, sem duplicação da implementação.
 
-## Comunicação
+## Dependências
 
 ```mermaid
-flowchart LR
-    U[Cliente] -->|Interage| V[View: HTML, CSS e JavaScript]
-    V -->|Requisição HTTP| C[Controller: Blueprint Flask]
-    C -->|Consulta ou operação| M[Model: regras e dados]
-    M -->|Resultado ou erro de negócio| C
-    C -->|Resposta HTML ou JSON| V
-    V -->|Exibe resultados| U
+flowchart TB
+    P[Apresentação: HTTP e interface] --> A[Aplicação: casos de uso]
+    A --> D[Domínio: regras de negócio]
+    A --> I[Infraestrutura: repositórios em memória]
+    I -->|Erros de recurso do domínio| D
 ```
 
-O Controller entrega o template na rota `/` e retorna JSON nas rotas `/api/`.
-O JavaScript da View usa esses endereços para atualizar a interface. Não há
-acesso direto da View aos objetos Python do Model.
+As camadas são lógicas; não exigem servidores separados. O domínio não importa
+Flask, serviços ou repositórios. A infraestrutura não importa os controladores
+ou os serviços. Os controladores chamam o serviço e não manipulam o armazenamento.
 
-## Exemplo: reserva de livro
+O serviço recebe repositórios por injeção de dependência. A mesma interface
+pública `Livraria(livros=None, agora=None)` continua disponível; testes ou outras
+composições podem informar `repositorio` e `dados` explicitamente.
 
-1. O cliente escolhe um livro e informa prazo e opção de embrulho na View.
-2. A View envia `POST /api/reservas` com os dados em JSON.
-3. O Controller identifica o cliente pela sessão e valida o formato da entrada.
-4. O Model verifica livro, estoque, prazo e opção de embrulho. Se a operação
-   for válida, registra a reserva e reduz o estoque atomicamente.
-5. O Controller retorna a reserva com status HTTP 201, ou o erro correspondente.
-6. A View consulta o estado atualizado e apresenta a confirmação ou mensagem de erro.
+## Exemplo: publicar uma avaliação
 
-## Organização e execução
-
-Cada chamada a `create_app(livraria=None)` configura uma aplicação e registra
-seu Controller. É possível fornecer um Model específico para testes; quando
-ele não é informado, a aplicação recebe dados demonstrativos próprios.
-
-O comando de execução continua sendo:
-
-```powershell
-.venv\Scripts\python.exe app.py
+```mermaid
+sequenceDiagram
+    actor Leitor
+    participant UI as Interface
+    participant C as Controller
+    participant S as Serviço de aplicação
+    participant D as Domínio
+    participant R as Repositórios
+    Leitor->>UI: Escolhe nota e escreve comentário
+    UI->>C: POST /api/livros/1984/avaliacoes
+    C->>S: publicar_avaliacao(cliente, livro, nota, texto)
+    S->>R: Obtém o livro
+    S->>D: Valida nota inteira 1–5 e comentário
+    D-->>S: Conteúdo válido
+    S->>R: Verifica duplicidade e salva avaliação
+    R-->>S: Avaliação armazenada
+    S-->>C: Avaliação pública
+    C-->>UI: HTTP 201 e JSON
+    UI-->>Leitor: Exibe avaliação e confirmação
 ```
 
-Abra <http://127.0.0.1:5000>. O navegador carrega o HTML e os arquivos locais
-em `/static/css/app.css` e `/static/js/app.js`.
+A autoria vem da sessão, e o corpo da requisição aceita somente `nota` e `texto`.
+A regra permite uma avaliação por cliente e livro. A verificação e a gravação
+ocorrem dentro da mesma operação atômica, evitando duplicação entre threads.
 
-Os dados são mantidos em memória e se perdem ao reiniciar o servidor. A sessão
-identifica o cliente para esta demonstração; não implementa autenticação.
-O escopo funcional e o contrato HTTP continuam em [livraria.md](specs/livraria.md).
-As verificações realizadas estão em [Validação MVC](validacao-mvc.md).
+A apresentação confirma a publicação usando a avaliação retornada pelo POST,
+sem depender de uma consulta posterior. Ao abrir um livro, consulta os detalhes
+e o campo `ja_avaliou` da sessão. Comentários são escapados na renderização,
+e erros de envio ficam junto ao formulário, preservando o rascunho para nova tentativa.
+
+## Armazenamento e contratos
+
+Os repositórios mantêm dados em memória. As referências de trabalho usadas pelo
+serviço são manipuladas dentro das operações atômicas; as respostas públicas
+recebem cópias, evitando alteração externa do estado por meio de uma consulta.
+A associação entre livro e cliente fica apenas no repositório; a avaliação pública
+contém um identificador de leitor diferente do identificador bruto da sessão.
+
+Reiniciar o servidor remove as alterações. A sessão identifica o cliente nesta
+demonstração e não implementa autenticação. O contrato completo e os critérios
+executáveis estão em [livraria.md](specs/livraria.md). Os resultados observados
+estão em [Validação multicamadas](validacao-multicamadas.md).

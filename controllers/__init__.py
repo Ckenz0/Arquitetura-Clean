@@ -1,4 +1,4 @@
-"""Controller: integração HTTP da aplicação MVC."""
+"""Apresentação HTTP da livraria."""
 
 from .livraria_controller import registrar_controladores
 

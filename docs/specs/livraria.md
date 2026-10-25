@@ -6,19 +6,16 @@ livraria física. O aplicativo não realiza pagamentos ou vendas online.
 
 ## Arquitetura e limites
 
-- `models/livraria.py`: Model com catálogo e regras dos seis épicos, sem Flask.
-- `models/demonstracao.py`: dados iniciais ilustrativos do Model.
-- `controllers/livraria_controller.py`: Controller com API JSON, sessão,
-  validação HTTP e entrega da página, registrado como Blueprint Flask.
-- `app.py`: configuração, composição e inicialização da aplicação.
-- `templates/index.html`, `static/css/app.css` e `static/js/app.js`: View
-  responsiva em português, sem serviços externos.
-- `livraria.py`: reexporta a interface pública do Model para compatibilidade
-  com os exemplos anteriores; não duplica as regras de negócio.
+- Apresentação: `controllers/`, `templates/` e `static/`; HTTP, sessão e interface.
+- Aplicação: `services/`; coordenação dos casos de uso e operações atômicas.
+- Domínio: `domain/`; regras de datas, quantidades, reservas, preferências e avaliações.
+- Infraestrutura: `repositories/`; armazenamento e consultas dos dados em memória.
+- `app.py` e `demonstracao.py`: configuração, composição e dados iniciais ilustrativos.
+- `livraria.py` e `models/`: compatibilidade com os imports públicos anteriores.
 - `test_livraria.py`: testes unitários, integração HTTP e cenários BDD extraídos
   diretamente do bloco Gherkin deste documento.
 - `docs/specs/tasks.md`: plano e registro da execução.
-- [Arquitetura MVC](../arquitetura.md): responsabilidades e fluxo da aplicação.
+- [Arquitetura multicamadas](../arquitetura.md): responsabilidades e fluxo da aplicação.
 - Python 3.10 ou superior; dependências declaradas em `requirements.txt`.
 - Os dados ficam em memória e são reiniciados com o servidor. O catálogo,
   compras, cupons, horários e eventos iniciais são exemplos demonstrativos.
@@ -67,8 +64,8 @@ Estas decisões tornam as histórias verificáveis sem criar taxas ou limites:
    informada, não é inventado um limite. A loja fornece `lembrar_em`; não
    existe uma antecedência fixa presumida para lembretes.
 9. Clube de leitura permite adesão e publicação de opiniões identificadas
-   pelo cliente. Avaliações de livros são consultadas, não publicadas, pois
-   a US pede leitura de avaliações. A lista de desejos não duplica livros.
+   pelo cliente. Avaliações de livros podem ser consultadas e publicadas
+   conforme as regras da E1-08. A lista de desejos não duplica livros.
 10. As preferências de notificação usam temas `estoque`, `reservas`,
     `fidelidade` e `eventos`. `None` significa todos; uma lista vazia significa
     nenhum. Avisos são gerados uma vez e seguem a escolha vigente no momento
@@ -78,6 +75,12 @@ Estas decisões tornam as histórias verificáveis sem criar taxas ou limites:
     dados malformados produzem erro legível sem alterar o estado. Um cliente
     só acessa suas reservas, histórico, pontos, lista e notificações.
     As alterações de estoque são atômicas dentro do processo do servidor.
+12. Avaliações de livros exigem nota inteira de 1 a 5 e comentário não vazio.
+    Cada cliente, identificado pela sessão, pode publicar uma vez por livro,
+    sem edição ou exclusão. A publicação é pública, mas não contém o identificador
+    bruto da sessão. Avaliações ilustrativas antigas permanecem sem nota.
+    Não há exigência de compra prévia. Publicações simultâneas do mesmo cliente
+    não geram duplicação. O comentário é exibido como texto, sem executar HTML.
 
 ## User Stories
 
@@ -90,6 +93,7 @@ Estas decisões tornam as histórias verificáveis sem criar taxas ou limites:
 - **E1-05:** Como cliente da livraria, eu quero receber uma notificação quando um livro esgotado voltar ao estoque para não perder a chance de comprá-lo.
 - **E1-06:** Como cliente da livraria, eu quero ver recomendações personalizadas com base nas minhas compras anteriores para descobrir novos livros do meu interesse.
 - **E1-07:** Como cliente da livraria, eu quero ler avaliações de outros clientes sobre um livro para decidir se quero comprá-lo.
+- **E1-08:** Como cliente da livraria, eu quero publicar uma avaliação de livro com nota e comentário para compartilhar minha experiência com outros leitores.
 
 ### E2 — Localização e experiência na loja
 
@@ -336,6 +340,24 @@ Feature: Visitar e aproveitar a livraria física
   Scenario: Reservar um presente com embrulho especial
     When eu reservar "O Hobbit" como presente até "2026-09-29T18:00:00+00:00"
     Then minha reserva deve ter embrulho especial
+
+  @E1-08
+  Scenario: Publicar uma avaliação visível a outros leitores
+    When eu avaliar "1984" com nota 5 e comentário "Uma leitura excelente."
+    Then outra cliente deve ver minha avaliação de "1984" com nota 5
+
+  @E1-08
+  Scenario: Recusar uma nota fora da escala
+    When eu avaliar "1984" com nota 0 e comentário "Uma leitura excelente."
+    Then a avaliação deve ser recusada com status 400
+    And não deve existir uma avaliação minha de "1984"
+
+  @E1-08
+  Scenario: Impedir a repetição da avaliação pelo mesmo cliente
+    When eu avaliar "1984" com nota 5 e comentário "Uma leitura excelente."
+    And eu avaliar "1984" com nota 4 e comentário "Outra opinião."
+    Then a avaliação deve ser recusada com status 409
+    And deve existir apenas uma nova avaliação de "1984"
 ```
 
 ## Contrato HTTP
@@ -350,7 +372,8 @@ indisponibilidade ou conflito. Rotas administrativas não são públicas.
 | GET | `/` | Página HTML |
 | GET | `/api/estado` | Cliente, livros, reservas, fidelidade, loja, eventos, clubes, notificações e recomendações |
 | GET | `/api/livros` | Query `q`, `genero`, `lancamentos=1`; lista de livros |
-| GET | `/api/livros/<id>` | Detalhes de um livro |
+| GET | `/api/livros/<id>` | Detalhes, avaliações públicas e `ja_avaliou` da sessão atual |
+| POST | `/api/livros/<id>/avaliacoes` | `nota` inteira de 1 a 5 e `texto` não vazio; avaliação criada com 201 |
 | GET | `/api/codigo/<codigo>` | Detalhes pelo código de barras |
 | POST | `/api/avisos-estoque` | `livro_id` |
 | POST | `/api/reservas` | `livro_id`, `prazo`, `embrulho` opcional |
@@ -364,6 +387,12 @@ indisponibilidade ou conflito. Rotas administrativas não são públicas.
 | POST | `/api/desejos` | `livro_id` |
 | PATCH | `/api/preferencias` | `generos` e/ou `temas_notificacao` como listas de strings |
 
+Uma avaliação pública contém `id`, `cliente` (identificador público de leitor),
+`nota`, `texto` e `data`. A autoria interna vem da sessão, e o POST aceita apenas
+`nota` e `texto`. Publicação repetida retorna 409; entrada inválida, 400;
+livro inexistente, 404. As avaliações são compartilhadas entre os leitores;
+o campo `ja_avaliou` é específico da sessão que consulta o livro.
+
 ## Referências metodológicas
 
 - [lab05_tdd](https://github.com/Ckenz0/lab05_tdd): testes `pytest` para
@@ -371,7 +400,7 @@ indisponibilidade ou conflito. Rotas administrativas não são públicas.
 - [lab05_bdd](https://github.com/Ckenz0/lab05_bdd): Gherkin e separação entre
   `Catalogo` e `RepositorioLivros`; os seis primeiros cenários seguem os
   exemplos de descoberta e estoque. Os steps são adaptados a `pytest-bdd`
-  para manter os testes no arquivo solicitado e evitar duplicar a spec.
+  para reunir os testes e evitar duplicar a especificação.
 
 Esses repositórios orientam a técnica e a compatibilidade dos exemplos;
 não substituem esta especificação como fonte de regras de negócio.
