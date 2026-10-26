@@ -1,4 +1,7 @@
-# Validação da arquitetura multicamadas e das avaliações
+# Histórico da validação multicamadas e das avaliações
+
+Este registro descreve a versão anterior com armazenamento em memória.
+A verificação atual está em [Validação Clean](validacao-clean.md).
 
 Verificação local em 25/10/2026, com Python 3.12.15, Flask 3.1.3,
 pytest 8.4.2, pytest-bdd 8.1.0 e Playwright 1.64.1 com Chrome instalado.

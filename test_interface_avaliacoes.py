@@ -20,7 +20,7 @@ def test_interface_publica_avaliacao_e_preserva_rascunho_em_erro(largura, altura
     ] if Path(p).is_file()), None)
     if not executavel:
         pytest.skip("Informe PLAYWRIGHT_BROWSER_EXECUTABLE para executar o teste de interface.")
-    servidor = make_server("127.0.0.1", 0, create_app())
+    servidor = make_server("127.0.0.1", 0, create_app(arquivo_dados=None))
     thread = Thread(target=servidor.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{servidor.server_port}"

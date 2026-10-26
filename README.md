@@ -1,23 +1,43 @@
 # Entrelinhas — Livraria
 
-Aplicação Python/Flask para as 31 User Stories dos épicos E1–E6: descoberta
+Aplicação Python/Flask para as 32 User Stories dos épicos E1–E6: descoberta
 de livros, visita à loja, reservas, fidelidade, comunidade e preferências.
 
 A fonte única de verdade é [docs/specs/livraria.md](docs/specs/livraria.md),
-que contém as histórias, decisões de escopo, contrato HTTP e 36 cenários
+que contém as histórias, decisões de escopo, contrato HTTP e 39 cenários
 Gherkin. O histórico inicial está em [docs/specs/tasks.md](docs/specs/tasks.md).
 
-A aplicação utiliza **quatro camadas**: apresentação, aplicação, domínio e
-infraestrutura. A separação e o fluxo de publicação de avaliações estão em
-[Arquitetura multicamadas](docs/arquitetura.md).
+A aplicação utiliza **Clean Architecture e DIP**: entidades e casos de uso
+dependem de contratos internos, enquanto Flask e o armazenamento são conectados
+na composição externa. Os dados são persistidos em **TXT**. Veja
+[Clean Architecture](docs/arquitetura.md).
 
 ## Avaliações de livros
 
 Abra os detalhes de um livro, escolha uma nota de 1 a 5, escreva seu comentário
 e selecione **Publicar avaliação**. A publicação fica visível para outros leitores.
 Cada cliente, identificado pela sessão do navegador, pode publicar uma avaliação
-por livro; não há edição ou exclusão. Se o envio falhar, o formulário preserva
-o rascunho e mostra o erro para permitir uma nova tentativa.
+por livro. Para atualizar a própria nota e comentário, selecione **Editar avaliação**,
+altere o formulário preenchido e use **Salvar alterações**. **Cancelar edição**
+mantém a publicação original. Não há exclusão. Se o envio falhar, o formulário
+preserva o rascunho e mostra o erro para permitir uma nova tentativa.
+
+## Persistência em TXT
+
+A execução normal cria `instance/livraria.txt`, com JSON legível em UTF-8 e versão
+do formato. Catálogo, estoque, reservas, preferências, compras, pontos, eventos,
+avaliações e os demais dados continuam disponíveis após reiniciar o servidor.
+Os dados demonstrativos são criados somente na primeira inicialização.
+
+A chave de sessão é mantida em `instance/chave_sessao.key`, para que o mesmo
+navegador continue identificado depois de reiniciar. `SECRET_KEY` pode fornecer
+uma chave externamente. O caminho do TXT pode ser configurado pela variável
+`LIVRARIA_ARQUIVO_DADOS`; a chave local fica junto desse arquivo.
+
+Alterações são gravadas por substituição atômica do TXT. Falhas de escrita
+revertem a operação e preservam o arquivo anterior. Um arquivo inválido gera erro
+sem ser sobrescrito pelos dados de demonstração. A pasta `instance/` e seus
+arquivos de execução são locais e não integram o código entregue.
 
 ## Executar neste workspace
 
@@ -70,7 +90,12 @@ Cada cenário tem uma etiqueta correspondente à sua User Story.
 concorrência e fronteiras de dependência entre as camadas.
 `test_interface_avaliacoes.py` verifica o novo formulário em desktop e celular.
 
-Os quatro testes marcados `interface` usam um navegador real. São opcionais e
+`test_clean.py` verifica edição, autoria, ports e fronteiras do núcleo.
+`test_persistencia.py` usa TXT reais em diretórios temporários, incluindo leitura
+em outro processo, falhas de gravação, rollback e recuperação da sessão.
+`test_interface_edicao.py` verifica a edição e o reinício pelo navegador.
+
+Os seis testes marcados `interface` usam um navegador real. São opcionais e
 ficam como ignorados quando Playwright ou o navegador não estiver instalado.
 Para executá-los com Chrome/Edge instalado:
 
@@ -102,45 +127,53 @@ docs/specs/
   tasks.md
 docs/
   arquitetura.md
+  validacao-clean.md
   validacao-multicamadas.md
   validacao-mvc.md
-controllers/
-  __init__.py
-  livraria_controller.py
-services/
-  __init__.py
-  livraria_service.py
-domain/
-  __init__.py
+entities/
   regras.py
   avaliacao.py
-repositories/
-  __init__.py
-  livros.py
-  estado.py
+use_cases/
+  ports.py
+  livraria.py
+interface_adapters/
+  http.py
+  repositories.py
+infrastructure/
+  composition.py
+  transactions.py
+  txt.py
+  web.py
 templates/
   index.html
 static/
   css/app.css
   js/app.js
 models/                 # compatibilidade com os imports anteriores
+domain/                 # compatibilidade das regras
+services/               # compatibilidade dos serviços
+repositories/           # compatibilidade dos repositórios
+controllers/            # compatibilidade do registro HTTP
 livraria.py              # compatibilidade com os exemplos anteriores
 demonstracao.py          # composição dos dados ilustrativos
 app.py                  # configuração e inicialização
 test_livraria.py
 test_avaliacoes.py
 test_interface_avaliacoes.py
+test_clean.py
+test_persistencia.py
+test_interface_edicao.py
 requirements.txt
 pytest.ini
 README.md
 .gitignore
 ```
 
-Os endereços HTTP e as regras anteriores foram preservados, com uma nova rota
-para publicação de avaliações. `livraria.py` e `models/` reexportam os nomes
-públicos anteriores para manter os exemplos e testes compatíveis.
-Os resultados atuais estão no [registro de validação](docs/validacao-multicamadas.md).
-O arquivo `docs/validacao-mvc.md` registra a verificação histórica da versão MVC.
+Os endereços HTTP anteriores foram preservados, com uma nova rota PATCH para
+editar a avaliação própria. Os módulos de compatibilidade preservam os imports
+dos exemplos anteriores. Os resultados atuais estão no
+[registro de validação](docs/validacao-clean.md); os registros MVC e multicamadas
+descrevem as versões anteriores.
 
 ## Uso e limites da demonstração
 
@@ -148,9 +181,14 @@ O catálogo inicia com livros, horários, eventos e um clube ilustrativos.
 Cada sessão recebe uma compra física e um cupom fictícios para demonstrar
 histórico, pontos, cartão digital, recomendações e notificações.
 
-Os dados estão em memória: reiniciar o servidor apaga as alterações.
-Cada navegador usa uma sessão própria; a sessão não implementa login.
+Os dados são persistidos em TXT. Cada navegador usa uma sessão própria;
+a sessão não implementa login ou autenticação de contas.
 O servidor inicia apenas em `127.0.0.1`, sem modo de depuração.
+
+Para executar a factory com dados isolados em memória, use
+`create_app(arquivo_dados=None)`; uma livraria injetada em `create_app(livraria)`
+também preserva o isolamento dos testes. O módulo pode ser importado sem criar
+arquivos; a composição ocorre ao chamar a factory ou iniciar o servidor.
 
 As notificações ficam no aplicativo. A página atualiza o estado a cada
 15 segundos enquanto estiver visível; não há push, SMS ou envio de e-mail.

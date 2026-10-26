@@ -1,14 +1,10 @@
-"""Dados iniciais ilustrativos da livraria em memória."""
+"""Dados iniciais ilustrativos usados na composição da livraria."""
 
 from datetime import timedelta
 
-from repositories import RepositorioEstado, RepositorioLivros
-from services import Livraria
 
-
-def criar_demonstracao():
-    """Dados ilustrativos da loja; os números não definem políticas comerciais."""
-    livros = [
+def livros_iniciais():
+    return [
         {"id": "1984", "titulo": "1984", "autor": "George Orwell", "ano": 1949,
          "genero": "Distopia", "estoque": 3, "lancamento": False, "preco": 49.90,
          "codigo": "9788535914849", "secao": "Literatura", "prateleira": "A1",
@@ -35,7 +31,9 @@ def criar_demonstracao():
          "sinopse": "Um título de demonstração para acompanhar a reposição de estoque.",
          "avaliacoes": []},
     ]
-    loja = Livraria(repositorio=RepositorioLivros(livros), dados=RepositorioEstado())
+
+
+def preencher_demonstracao(loja):
     loja.configurar_loja("Seg–Sáb, 09h às 19h", 12)
     agora = loja.agora()
     loja.oferecer_horario("Carlos · Literatura e clássicos", (agora + timedelta(days=1)).isoformat())
@@ -48,3 +46,8 @@ def criar_demonstracao():
                          lembrar_em=(agora + timedelta(days=6)).isoformat())
     loja.criar_clube("Leituras compartilhadas")
     return loja
+
+
+def criar_demonstracao():
+    from infrastructure.composition import Livraria
+    return preencher_demonstracao(Livraria(livros_iniciais()))

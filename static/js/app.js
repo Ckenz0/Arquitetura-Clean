@@ -7,6 +7,7 @@ const localInput = value => { const d = new Date(value); return new Date(d.getTi
 const vazio = texto => `<div class="empty">${esc(texto)}</div>`;
 let estado = null, assinatura = '', atualizando = null, atualizarDepois = false, preferenciasDirty = false;
 let stream = null, cameraTimer = null, toastTimer = null;
+let livroAberto = null;
 
 function avisar(mensagem, erro=false) {
   const toast = $('#toast');
@@ -128,28 +129,48 @@ function renderizar() {
 }
 
 function htmlAvaliacao(avaliacao) {
-  return `<div class="opinion"><span class="label">${esc(avaliacao.cliente)}</span>${Number.isInteger(avaliacao.nota) ? `<strong class="review-rating">Nota ${esc(avaliacao.nota)} de 5</strong>` : ''}<p>${esc(avaliacao.texto)}</p></div>`;
+  return `<div class="opinion"><span class="label">${esc(avaliacao.cliente)}</span>${Number.isInteger(avaliacao.nota) ? `<strong class="review-rating">Nota ${esc(avaliacao.nota)} de 5</strong>` : ''}<p>${esc(avaliacao.texto)}</p>${avaliacao.atualizada_em ? `<span class="subtle">Editada em ${esc(data(avaliacao.atualizada_em))}</span>` : ''}</div>`;
 }
 
-function htmlConfirmacaoAvaliacao() {
-  return '<p id="avaliacao-confirmacao" role="status" tabindex="-1">Você já publicou uma avaliação deste livro. Obrigado por compartilhar sua leitura.</p>';
+function htmlConfirmacaoAvaliacao(livroId, editada=false) {
+  return `<div id="avaliacao-confirmacao" role="status" tabindex="-1"><p>${editada ? 'Alterações salvas. ' : ''}Você já publicou uma avaliação deste livro. Obrigado por compartilhar sua leitura.</p><button type="button" class="btn secondary" data-action="editar-avaliacao" data-id="${esc(livroId)}">Editar avaliação</button></div>`;
+}
+
+function htmlFormularioAvaliacao(livro, avaliacao=null) {
+  const editando = avaliacao !== null;
+  return `<form id="${editando ? 'edicao-avaliacao-form' : 'avaliacao-form'}" data-id="${esc(livro.id)}">
+    <p class="subtle" id="avaliacao-ajuda">${editando ? 'Atualize sua nota ou comentário. Sua autoria será preservada.' : 'Sua avaliação será pública. Você poderá editá-la depois.'}</p>
+    <div class="field"><label for="avaliacao-nota">Sua nota</label><select id="avaliacao-nota" name="nota" required><option value="">Escolha de 1 a 5</option>${[1,2,3,4,5].map(n => `<option value="${n}" ${avaliacao?.nota === n ? 'selected' : ''}>${n} de 5</option>`).join('')}</select></div>
+    <div class="field"><label for="avaliacao-texto">Seu comentário</label><textarea id="avaliacao-texto" name="texto" rows="4" required aria-describedby="avaliacao-ajuda" placeholder="O que você achou desta leitura?">${esc(avaliacao?.texto || '')}</textarea></div>
+    <p id="avaliacao-erro" class="form-error" role="alert" tabindex="-1" hidden></p>
+    <div class="review-form-actions"><button type="submit" class="btn">${editando ? 'Salvar alterações' : 'Publicar avaliação'}</button>${editando ? '<button type="button" class="btn secondary" data-action="cancelar-edicao-avaliacao">Cancelar edição</button>' : ''}</div>
+  </form>`;
+}
+
+function confirmarAvaliacao(livroId, avaliacao, editada) {
+  if (!livroAberto || livroAberto.id !== livroId) return;
+  livroAberto.minha_avaliacao = avaliacao;
+  livroAberto.ja_avaliou = true;
+  const avaliacoes = livroAberto.avaliacoes || [];
+  const indice = avaliacoes.findIndex(a => a.id === avaliacao.id);
+  if (indice >= 0) avaliacoes[indice] = avaliacao;
+  else avaliacoes.push(avaliacao);
+  livroAberto.avaliacoes = avaliacoes;
+  $('#book-reviews').innerHTML = avaliacoes.map(htmlAvaliacao).join('');
+  $('#review-controls').innerHTML = htmlConfirmacaoAvaliacao(livroId, editada);
+  if ($('#book-dialog').open) $('#avaliacao-confirmacao').focus();
 }
 
 async function abrirLivro(id) {
   const l = await api(`/api/livros/${encodeURIComponent(id)}`);
+  livroAberto = l;
   const avaliacoes = l.avaliacoes?.length
     ? l.avaliacoes.map(htmlAvaliacao).join('')
     : '<p class="subtle review-empty">Este livro ainda não tem avaliações.</p>';
   const formulario = l.ja_avaliou
-    ? htmlConfirmacaoAvaliacao()
-    : `<form id="avaliacao-form" data-id="${esc(l.id)}">
-        <p class="subtle" id="avaliacao-ajuda">Sua avaliação será pública e não poderá ser editada.</p>
-        <div class="field"><label for="avaliacao-nota">Sua nota</label><select id="avaliacao-nota" name="nota" required><option value="">Escolha de 1 a 5</option>${[1,2,3,4,5].map(n => `<option value="${n}">${n} de 5</option>`).join('')}</select></div>
-        <div class="field"><label for="avaliacao-texto">Seu comentário</label><textarea id="avaliacao-texto" name="texto" rows="4" required aria-describedby="avaliacao-ajuda" placeholder="O que você achou desta leitura?"></textarea></div>
-        <p id="avaliacao-erro" class="form-error" role="alert" tabindex="-1" hidden></p>
-        <button type="submit" class="btn">Publicar avaliação</button>
-      </form>`;
-  $('#book-details').innerHTML = `<div class="dialog-heading"><div><div class="eyebrow">${esc(l.genero)}</div><h2 id="book-title">${esc(l.titulo)}</h2></div><button class="close" data-close aria-label="Fechar">×</button></div><p class="subtle">${esc(l.autor)}</p><p>${esc(l.sinopse || 'Sinopse não informada.')}</p><div class="details-grid"><div><span class="label">Preço na loja</span><strong>${dinheiro(l.preco)}</strong></div><div><span class="label">Disponibilidade</span><strong>${l.estoque} exemplares</strong></div><div><span class="label">Seção</span><strong>${esc(l.secao || 'Não informada')}</strong></div><div><span class="label">Prateleira</span><strong>${esc(l.prateleira || 'Não informada')}</strong></div></div><h3>Quem leu, conta</h3><div id="book-reviews">${avaliacoes}</div><div class="details-actions"><button class="btn" data-action="${l.estoque ? 'reservar' : 'acompanhar'}" data-id="${esc(l.id)}">${l.estoque ? 'Reservar para retirada' : 'Avise-me quando chegar'}</button><button class="btn secondary" data-action="desejo" data-id="${esc(l.id)}">♡ Guardar</button></div><section class="review-section" aria-label="Sua avaliação"><h3>Sua avaliação</h3>${formulario}</section>`;
+    ? htmlConfirmacaoAvaliacao(l.id)
+    : htmlFormularioAvaliacao(l);
+  $('#book-details').innerHTML = `<div class="dialog-heading"><div><div class="eyebrow">${esc(l.genero)}</div><h2 id="book-title">${esc(l.titulo)}</h2></div><button class="close" data-close aria-label="Fechar">×</button></div><p class="subtle">${esc(l.autor)}</p><p>${esc(l.sinopse || 'Sinopse não informada.')}</p><div class="details-grid"><div><span class="label">Preço na loja</span><strong>${dinheiro(l.preco)}</strong></div><div><span class="label">Disponibilidade</span><strong>${l.estoque} exemplares</strong></div><div><span class="label">Seção</span><strong>${esc(l.secao || 'Não informada')}</strong></div><div><span class="label">Prateleira</span><strong>${esc(l.prateleira || 'Não informada')}</strong></div></div><h3>Quem leu, conta</h3><div id="book-reviews">${avaliacoes}</div><div class="details-actions"><button class="btn" data-action="${l.estoque ? 'reservar' : 'acompanhar'}" data-id="${esc(l.id)}">${l.estoque ? 'Reservar para retirada' : 'Avise-me quando chegar'}</button><button class="btn secondary" data-action="desejo" data-id="${esc(l.id)}">♡ Guardar</button></div><section class="review-section" aria-label="Sua avaliação"><h3>Sua avaliação</h3><div id="review-controls">${formulario}</div></section>`;
   if (!$('#book-dialog').open) $('#book-dialog').showModal();
 }
 
@@ -213,6 +234,18 @@ document.addEventListener('click', event => {
     if (action === 'notificacoes') { $('#notifications-dialog').showModal(); return; }
     if (action === 'escanear') { $('#camera-status').textContent = ''; $('#scan-dialog').showModal(); return; }
     if (action === 'camera') { await iniciarCamera(); return; }
+    if (action === 'editar-avaliacao') {
+      if (livroAberto?.id === id && livroAberto.minha_avaliacao) {
+        $('#review-controls').innerHTML = htmlFormularioAvaliacao(livroAberto, livroAberto.minha_avaliacao);
+        $('#avaliacao-nota').focus();
+      }
+      return;
+    }
+    if (action === 'cancelar-edicao-avaliacao') {
+      $('#review-controls').innerHTML = htmlConfirmacaoAvaliacao(livroAberto.id);
+      $('#avaliacao-confirmacao').focus();
+      return;
+    }
     if (action === 'prazo') {
       const r = estado.reservas.find(r => r.id === id);
       $('#deadline-form').elements.reserva_id.value = id;
@@ -238,25 +271,23 @@ document.addEventListener('submit', event => {
   if (form.id === 'filtros') { renderizarCatalogo(); return; }
   executar(form.querySelector('button[type="submit"]'), async () => {
     const values = new FormData(form);
-    if (form.id === 'avaliacao-form') {
+    if (form.id === 'avaliacao-form' || form.id === 'edicao-avaliacao-form') {
+      const editando = form.id === 'edicao-avaliacao-form';
       const erroPublicacao = $('#avaliacao-erro');
       erroPublicacao.hidden = true;
       let publicada;
       try {
-        publicada = await api(`/api/livros/${encodeURIComponent(form.dataset.id)}/avaliacoes`, 'POST', {
+        const url = `/api/livros/${encodeURIComponent(form.dataset.id)}/avaliacoes${editando ? '/minha' : ''}`;
+        publicada = await api(url, editando ? 'PATCH' : 'POST', {
           nota:Number(values.get('nota')), texto:values.get('texto')
         });
       } catch (erro) {
-        erroPublicacao.textContent = erro.message || 'Não foi possível publicar. Tente novamente.';
+        erroPublicacao.textContent = erro.message || 'Não foi possível salvar. Tente novamente.';
         erroPublicacao.hidden = false;
         erroPublicacao.focus();
         return;
       }
-      const listaAvaliacoes = $('#book-reviews');
-      listaAvaliacoes.querySelector('.review-empty')?.remove();
-      listaAvaliacoes.insertAdjacentHTML('beforeend', htmlAvaliacao(publicada));
-      form.outerHTML = htmlConfirmacaoAvaliacao();
-      $('#avaliacao-confirmacao').focus();
+      confirmarAvaliacao(form.dataset.id, publicada, editando);
       await atualizar();
       return;
     } else if (form.id === 'reserve-form') {

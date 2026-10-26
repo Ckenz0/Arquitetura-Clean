@@ -750,6 +750,39 @@ def avaliacao_unica_bdd(contexto, titulo):
     assert [a for a in livro["avaliacoes"] if "nota" in a] == [contexto["avaliacao"]]
 
 
+@when(parsers.parse('eu editar minha avaliação de "{titulo}" para nota {nota:d} e comentário "{texto}"'))
+def editar_avaliacao_bdd(contexto, titulo, nota, texto):
+    contexto.setdefault("avaliacao_original", deepcopy(contexto["avaliacao"]))
+    contexto.pop("erro_avaliacao", None)
+    try:
+        contexto["avaliacao"] = contexto["loja"].editar_avaliacao(
+            contexto["cliente"], id_por_titulo(contexto, titulo), nota, texto,
+        )
+    except import_module("livraria").ErroLivraria as erro:
+        contexto["erro_avaliacao"] = erro
+
+
+@when(parsers.parse('outra cliente tentar editar minha avaliação de "{titulo}"'))
+def outra_cliente_editar_bdd(contexto, titulo):
+    try:
+        contexto["loja"].editar_avaliacao("bia", id_por_titulo(contexto, titulo), 1, "Outra pessoa.")
+    except import_module("livraria").ErroLivraria as erro:
+        contexto["erro_avaliacao"] = erro
+
+
+@then(parsers.parse('minha avaliação de "{titulo}" deve ter nota {nota:d} e comentário "{texto}"'))
+def avaliacao_editada_bdd(contexto, titulo, nota, texto):
+    minha = contexto["loja"].livro(id_por_titulo(contexto, titulo), contexto["cliente"])["minha_avaliacao"]
+    assert minha["nota"] == nota and minha["texto"] == texto
+
+
+@then("a edição deve preservar a identidade da publicação")
+def identidade_avaliacao_bdd(contexto):
+    for campo in ("id", "cliente", "data"):
+        assert contexto["avaliacao"][campo] == contexto["avaliacao_original"][campo]
+    assert "atualizada_em" in contexto["avaliacao"]
+
+
 def cliente_http():
     loja = nova_livraria()
     app = import_module("app").create_app(loja)
@@ -910,7 +943,7 @@ def test_interface_fluxos_desktop_e_mobile():
         ] if Path(p).is_file()), None)
     if not executavel:
         pytest.skip("Informe PLAYWRIGHT_BROWSER_EXECUTABLE para executar o teste de interface.")
-    app = import_module("app").create_app()
+    app = import_module("app").create_app(arquivo_dados=None)
     servidor = make_server("127.0.0.1", 0, app)
     thread = Thread(target=servidor.serve_forever, daemon=True)
     thread.start()
@@ -1009,7 +1042,7 @@ def test_interface_atualizacao_durante_consulta_em_andamento():
     ] if Path(p).is_file()), None)
     if not executavel:
         pytest.skip("Informe PLAYWRIGHT_BROWSER_EXECUTABLE para executar o teste de interface.")
-    servidor = make_server("127.0.0.1", 0, import_module("app").create_app())
+    servidor = make_server("127.0.0.1", 0, import_module("app").create_app(arquivo_dados=None))
     thread = Thread(target=servidor.serve_forever, daemon=True)
     thread.start()
     try:

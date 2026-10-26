@@ -1,7 +1,7 @@
 # Histórico da validação MVC
 
 Este registro corresponde à base MVC anterior à arquitetura multicamadas.
-A verificação atual está em [Validação multicamadas](validacao-multicamadas.md).
+A verificação atual está em [Validação Clean](validacao-clean.md).
 
 Verificação local em 25/10/2026, com Python 3.12.15, Flask 3.1.3, pytest 8.4.2
 e pytest-bdd 8.1.0. Playwright instalado para executar os testes no navegador.

@@ -6,19 +6,21 @@ livraria física. O aplicativo não realiza pagamentos ou vendas online.
 
 ## Arquitetura e limites
 
-- Apresentação: `controllers/`, `templates/` e `static/`; HTTP, sessão e interface.
-- Aplicação: `services/`; coordenação dos casos de uso e operações atômicas.
-- Domínio: `domain/`; regras de datas, quantidades, reservas, preferências e avaliações.
-- Infraestrutura: `repositories/`; armazenamento e consultas dos dados em memória.
-- `app.py` e `demonstracao.py`: configuração, composição e dados iniciais ilustrativos.
-- `livraria.py` e `models/`: compatibilidade com os imports públicos anteriores.
+- Entidades: `entities/`; regras e valores do negócio independentes de tecnologia.
+- Casos de uso: `use_cases/`; operações da livraria e contratos internos de dados/transações.
+- Adaptadores: `interface_adapters/`; HTTP e implementações dos repositórios.
+- Infraestrutura: `infrastructure/`; Flask, composição e transações em memória ou TXT.
+- `app.py` e `demonstracao.py`: entrada e dados iniciais ilustrativos.
+- `livraria.py`, `models/`, `domain/`, `services/`, `repositories/` e `controllers/`:
+  compatibilidade com os imports públicos anteriores, sem duplicar a implementação.
 - `test_livraria.py`: testes unitários, integração HTTP e cenários BDD extraídos
   diretamente do bloco Gherkin deste documento.
 - `docs/specs/tasks.md`: plano e registro da execução.
-- [Arquitetura multicamadas](../arquitetura.md): responsabilidades e fluxo da aplicação.
+- [Clean Architecture](../arquitetura.md): responsabilidades, DIP e fluxo da aplicação.
 - Python 3.10 ou superior; dependências declaradas em `requirements.txt`.
-- Os dados ficam em memória e são reiniciados com o servidor. O catálogo,
-  compras, cupons, horários e eventos iniciais são exemplos demonstrativos.
+- A execução normal persiste o estado em `instance/livraria.txt`, em UTF-8 com
+  JSON versionado. Reiniciar preserva catálogo, estoque, clientes e suas operações.
+  Os dados iniciais são ilustrativos e criados somente quando não existe arquivo salvo.
 - Cada navegador recebe uma sessão própria. Não há cadastro, senha ou
   integração com um sistema de caixa, pois essas funcionalidades não foram
   solicitadas. A sessão não constitui autenticação para uso em produção.
@@ -65,7 +67,8 @@ Estas decisões tornam as histórias verificáveis sem criar taxas ou limites:
    existe uma antecedência fixa presumida para lembretes.
 9. Clube de leitura permite adesão e publicação de opiniões identificadas
    pelo cliente. Avaliações de livros podem ser consultadas e publicadas
-   conforme as regras da E1-08. A lista de desejos não duplica livros.
+   conforme as regras da E1-08 e editadas pela autoria conforme E1-09.
+   A lista de desejos não duplica livros.
 10. As preferências de notificação usam temas `estoque`, `reservas`,
     `fidelidade` e `eventos`. `None` significa todos; uma lista vazia significa
     nenhum. Avisos são gerados uma vez e seguem a escolha vigente no momento
@@ -77,10 +80,19 @@ Estas decisões tornam as histórias verificáveis sem criar taxas ou limites:
     As alterações de estoque são atômicas dentro do processo do servidor.
 12. Avaliações de livros exigem nota inteira de 1 a 5 e comentário não vazio.
     Cada cliente, identificado pela sessão, pode publicar uma vez por livro,
-    sem edição ou exclusão. A publicação é pública, mas não contém o identificador
+    sem exclusão. A publicação é pública, mas não contém o identificador
     bruto da sessão. Avaliações ilustrativas antigas permanecem sem nota.
     Não há exigência de compra prévia. Publicações simultâneas do mesmo cliente
     não geram duplicação. O comentário é exibido como texto, sem executar HTML.
+13. Somente a sessão autora pode editar sua avaliação. A edição exige nota e
+    comentário válidos, preserva id, autor público e data original e informa
+    `atualizada_em`. Não cria outra avaliação. Cancelar a edição não grava dados;
+    erros de envio preservam o rascunho, e a confirmação usa a resposta da gravação.
+14. Alterações relacionadas são salvas em uma transação com substituição atômica
+    do TXT. Falha de gravação preserva o arquivo anterior e reverte a memória.
+    Arquivo inválido ou incompatível gera erro sem reinicializar a demonstração.
+    A chave de sessão local estável preserva a identidade após reiniciar o servidor;
+    os arquivos de dados e a chave não fazem parte da entrega do código.
 
 ## User Stories
 
@@ -94,6 +106,7 @@ Estas decisões tornam as histórias verificáveis sem criar taxas ou limites:
 - **E1-06:** Como cliente da livraria, eu quero ver recomendações personalizadas com base nas minhas compras anteriores para descobrir novos livros do meu interesse.
 - **E1-07:** Como cliente da livraria, eu quero ler avaliações de outros clientes sobre um livro para decidir se quero comprá-lo.
 - **E1-08:** Como cliente da livraria, eu quero publicar uma avaliação de livro com nota e comentário para compartilhar minha experiência com outros leitores.
+- **E1-09:** Como cliente da livraria, eu quero editar minha avaliação de livro para atualizar a nota e o comentário sem perder minha autoria.
 
 ### E2 — Localização e experiência na loja
 
@@ -358,22 +371,45 @@ Feature: Visitar e aproveitar a livraria física
     And eu avaliar "1984" com nota 4 e comentário "Outra opinião."
     Then a avaliação deve ser recusada com status 409
     And deve existir apenas uma nova avaliação de "1984"
+
+  @E1-09
+  Scenario: Editar a própria avaliação sem criar outra publicação
+    When eu avaliar "1984" com nota 5 e comentário "Minha leitura original."
+    And eu editar minha avaliação de "1984" para nota 3 e comentário "Minha opinião revisada."
+    Then minha avaliação de "1984" deve ter nota 3 e comentário "Minha opinião revisada."
+    And a edição deve preservar a identidade da publicação
+    And deve existir apenas uma nova avaliação de "1984"
+
+  @E1-09
+  Scenario: Recusar uma edição com nota inválida
+    When eu avaliar "1984" com nota 5 e comentário "Minha leitura original."
+    And eu editar minha avaliação de "1984" para nota 0 e comentário "Nota inválida."
+    Then a avaliação deve ser recusada com status 400
+    And outra cliente deve ver minha avaliação de "1984" com nota 5
+
+  @E1-09
+  Scenario: Impedir que outra cliente edite minha avaliação
+    When eu avaliar "1984" com nota 5 e comentário "Minha leitura original."
+    And outra cliente tentar editar minha avaliação de "1984"
+    Then a avaliação deve ser recusada com status 404
+    And outra cliente deve ver minha avaliação de "1984" com nota 5
 ```
 
 ## Contrato HTTP
 
 Todos os caminhos abaixo pertencem à sessão atual. POST/PATCH recebem JSON.
 Sucesso retorna JSON; criação retorna 201. Erros retornam `{"erro": "..."}`:
-400 para entrada inválida, 404 para recurso inexistente e 409 para
-indisponibilidade ou conflito. Rotas administrativas não são públicas.
+400 para entrada inválida, 404 para recurso inexistente, 409 para conflito
+e 503 para indisponibilidade do armazenamento. Rotas administrativas não são públicas.
 
 | Método | Caminho | Entrada / saída |
 |---|---|---|
 | GET | `/` | Página HTML |
 | GET | `/api/estado` | Cliente, livros, reservas, fidelidade, loja, eventos, clubes, notificações e recomendações |
 | GET | `/api/livros` | Query `q`, `genero`, `lancamentos=1`; lista de livros |
-| GET | `/api/livros/<id>` | Detalhes, avaliações públicas e `ja_avaliou` da sessão atual |
+| GET | `/api/livros/<id>` | Detalhes, avaliações públicas, `ja_avaliou` e `minha_avaliacao` da sessão atual |
 | POST | `/api/livros/<id>/avaliacoes` | `nota` inteira de 1 a 5 e `texto` não vazio; avaliação criada com 201 |
+| PATCH | `/api/livros/<id>/avaliacoes/minha` | `nota` e `texto`, ambos obrigatórios; avaliação própria atualizada com 200 |
 | GET | `/api/codigo/<codigo>` | Detalhes pelo código de barras |
 | POST | `/api/avisos-estoque` | `livro_id` |
 | POST | `/api/reservas` | `livro_id`, `prazo`, `embrulho` opcional |
@@ -391,7 +427,10 @@ Uma avaliação pública contém `id`, `cliente` (identificador público de leit
 `nota`, `texto` e `data`. A autoria interna vem da sessão, e o POST aceita apenas
 `nota` e `texto`. Publicação repetida retorna 409; entrada inválida, 400;
 livro inexistente, 404. As avaliações são compartilhadas entre os leitores;
-o campo `ja_avaliou` é específico da sessão que consulta o livro.
+os campos `ja_avaliou` e `minha_avaliacao` são específicos da sessão que consulta
+o livro. `minha_avaliacao` é a avaliação pública da sessão, ou null. A edição
+mantém id, cliente e data, e acrescenta `atualizada_em`. Editar sem avaliação
+própria retorna 404. POST e PATCH não aceitam autor ou identificador de terceiros.
 
 ## Referências metodológicas
 

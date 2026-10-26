@@ -1,82 +1,118 @@
-# Arquitetura multicamadas — Livraria Entrelinhas
+# Clean Architecture — Livraria Entrelinhas
 
-A aplicação separa apresentação, aplicação, domínio e infraestrutura em quatro
-camadas lógicas. Ela é executada como um único programa Flask, com frontend
-funcional e armazenamento em memória.
+A aplicação mantém o negócio independente de Flask e da tecnologia de
+armazenamento. As dependências do código apontam para entidades, casos de uso
+e contratos internos. A composição externa escolhe os adaptadores em memória
+ou a persistência em arquivo TXT.
 
-## Responsabilidades
+## Organização
 
-| Camada | Arquivos | Responsabilidade |
+| Parte | Arquivos | Responsabilidade |
 | --- | --- | --- |
-| Apresentação | `controllers/livraria_controller.py`, `templates/index.html`, `static/css/app.css`, `static/js/app.js` | Receber HTTP, identificar a sessão, validar o formato das requisições, apresentar dados e capturar ações. |
-| Aplicação | `services/livraria_service.py` | Coordenar os casos de uso: buscar livros, reservar, participar de eventos e publicar avaliações; proteger operações compostas com o mesmo lock do estado. |
-| Domínio | `domain/regras.py`, `domain/avaliacao.py` | Aplicar regras e validações de datas, quantidades, disponibilidade para reserva, preferências, nota e comentário. |
-| Infraestrutura/dados | `repositories/livros.py`, `repositories/estado.py` | Armazenar livros e estado, consultar e salvar registros e manter a autoria interna das avaliações. |
+| Entidades | `entities/regras.py`, `entities/avaliacao.py` | Regras de datas, quantidades, reservas, preferências e conteúdo válido das avaliações. |
+| Casos de uso | `use_cases/livraria.py` | Coordenar as operações da livraria por contratos de dados e transações, sem construir tecnologias externas. |
+| Ports | `use_cases/ports.py` | Definir `LivrosPort`, `EstadoPort` e `TransacaoPort` como Protocols internos. |
+| Adaptadores de interface | `interface_adapters/http.py`, `interface_adapters/repositories.py` | Traduzir HTTP e implementar as interfaces de acesso ao estado de trabalho. |
+| Frameworks e drivers | `infrastructure/web.py`, `infrastructure/transactions.py`, `infrastructure/txt.py` | Configurar Flask e executar transações em memória ou com snapshot TXT. |
+| Composição | `infrastructure/composition.py`, `app.py`, `demonstracao.py` | Conectar os casos de uso a suas dependências e inicializar dados ilustrativos uma única vez. |
 
-`app.py` configura o Flask e conecta a apresentação ao serviço.
-`demonstracao.py` compõe o serviço com os repositórios em memória e os dados
-iniciais ilustrativos. `livraria.py` e `models/` são módulos de compatibilidade
-com os imports anteriores, sem duplicação da implementação.
+Os arquivos em `domain/`, `services/`, `repositories/`, `controllers/`,
+`models/` e `livraria.py` preservam os imports públicos anteriores por
+compatibilidade. A implementação do núcleo fica em `entities/` e `use_cases/`.
 
-## Dependências
+## DIP e direção das dependências
 
 ```mermaid
-flowchart TB
-    P[Apresentação: HTTP e interface] --> A[Aplicação: casos de uso]
-    A --> D[Domínio: regras de negócio]
-    A --> I[Infraestrutura: repositórios em memória]
-    I -->|Erros de recurso do domínio| D
+flowchart BT
+    HTTP[Adaptador HTTP] --> UC[Casos de uso]
+    UC --> E[Entidades]
+    UC --> P[Ports internos]
+    MEM[Repositórios de trabalho] -. implementam .-> P
+    TX[Transação em memória] -. implementa .-> P
+    TXT[Driver TXT] -. implementa .-> P
+    TXT --> MEM
+    WEB[Flask e composição externa] --> HTTP
+    WEB --> UC
+    WEB --> TXT
 ```
 
-As camadas são lógicas; não exigem servidores separados. O domínio não importa
-Flask, serviços ou repositórios. A infraestrutura não importa os controladores
-ou os serviços. Os controladores chamam o serviço e não manipulam o armazenamento.
+O núcleo recebe repositório de livros, estado e transação por injeção.
+Ele não importa Flask, JSON, Path, locks ou implementações concretas.
+O adaptador HTTP chama os casos de uso e não manipula o arquivo diretamente.
 
-O serviço recebe repositórios por injeção de dependência. A mesma interface
-pública `Livraria(livros=None, agora=None)` continua disponível; testes ou outras
-composições podem informar `repositorio` e `dados` explicitamente.
+O driver TXT usa os repositórios de trabalho e implementa a fronteira de
+transação. Ele carrega o estado, executa a operação e salva o resultado completo.
+Trocar essa transação pela implementação em memória não exige alterar as regras
+nem os casos de uso. Os testes executam a mesma edição com os dois adaptadores.
 
-## Exemplo: publicar uma avaliação
+## Edição da própria avaliação
 
 ```mermaid
 sequenceDiagram
     actor Leitor
     participant UI as Interface
-    participant C as Controller
-    participant S as Serviço de aplicação
-    participant D as Domínio
-    participant R as Repositórios
-    Leitor->>UI: Escolhe nota e escreve comentário
-    UI->>C: POST /api/livros/1984/avaliacoes
-    C->>S: publicar_avaliacao(cliente, livro, nota, texto)
-    S->>R: Obtém o livro
-    S->>D: Valida nota inteira 1–5 e comentário
-    D-->>S: Conteúdo válido
-    S->>R: Verifica duplicidade e salva avaliação
-    R-->>S: Avaliação armazenada
-    S-->>C: Avaliação pública
-    C-->>UI: HTTP 201 e JSON
-    UI-->>Leitor: Exibe avaliação e confirmação
+    participant HTTP as Adaptador HTTP
+    participant UC as Caso de uso
+    participant TX as Transação injetada
+    participant E as Entidade Avaliacao
+    Leitor->>UI: Editar nota e comentário
+    UI->>HTTP: PATCH /api/livros/1984/avaliacoes/minha
+    HTTP->>UC: editar_avaliacao(cliente, livro, nota, texto)
+    UC->>TX: Iniciar transação
+    TX-->>UC: Estado de trabalho atualizado
+    UC->>UC: Localizar avaliação da sessão autora
+    UC->>E: Validar nota e comentário
+    E-->>UC: Conteúdo válido
+    UC->>TX: Concluir alteração
+    TX->>TX: Gravar TXT por substituição atômica
+    TX-->>UC: Gravação concluída
+    UC-->>HTTP: Avaliação atualizada
+    HTTP-->>UI: HTTP 200 e JSON
+    UI-->>Leitor: Confirmar alterações salvas
 ```
 
-A autoria vem da sessão, e o corpo da requisição aceita somente `nota` e `texto`.
-A regra permite uma avaliação por cliente e livro. A verificação e a gravação
-ocorrem dentro da mesma operação atômica, evitando duplicação entre threads.
+A edição preserva id, autor público e data original, atualiza nota e comentário
+e registra `atualizada_em`. Ela não cria uma segunda avaliação. A rota atua
+somente sobre a avaliação da própria sessão; o corpo aceita apenas `nota` e
+`texto`. O GET de detalhes informa `minha_avaliacao` ou null.
 
-A apresentação confirma a publicação usando a avaliação retornada pelo POST,
-sem depender de uma consulta posterior. Ao abrir um livro, consulta os detalhes
-e o campo `ja_avaliou` da sessão. Comentários são escapados na renderização,
-e erros de envio ficam junto ao formulário, preservando o rascunho para nova tentativa.
+O formulário abre preenchido e permite cancelar sem enviar alterações.
+Erros mantêm o rascunho. A confirmação usa a resposta do PATCH e atualiza a
+publicação sem depender de uma consulta posterior. O texto é escapado em todas
+as renderizações, inclusive depois de editar.
 
-## Armazenamento e contratos
+## Persistência em TXT
 
-Os repositórios mantêm dados em memória. As referências de trabalho usadas pelo
-serviço são manipuladas dentro das operações atômicas; as respostas públicas
-recebem cópias, evitando alteração externa do estado por meio de uma consulta.
-A associação entre livro e cliente fica apenas no repositório; a avaliação pública
-contém um identificador de leitor diferente do identificador bruto da sessão.
+A execução normal salva `instance/livraria.txt`, um documento JSON legível
+em UTF-8 com `versao: 1`, catálogo e estado completo da livraria.
+Conjuntos são representados por listas e reconstruídos na leitura; a autoria
+interna das avaliações é armazenada em registros com livro e cliente.
+Não há pickle, execução de conteúdo ou banco relacional.
 
-Reiniciar o servidor remove as alterações. A sessão identifica o cliente nesta
-demonstração e não implementa autenticação. O contrato completo e os critérios
-executáveis estão em [livraria.md](specs/livraria.md). Os resultados observados
-estão em [Validação multicamadas](validacao-multicamadas.md).
+As operações usam um lock por caminho no processo. Instâncias que compartilham
+o mesmo TXT leem o estado mais recente antes de executar suas operações.
+Transações aninhadas gravam apenas ao concluir a operação externa.
+Consultas que não alteram dados não precisam regravar o arquivo.
+
+A gravação usa arquivo temporário no mesmo diretório, flush, fsync e substituição
+atômica. Em falha, o TXT anterior é preservado e os repositórios de trabalho são
+restaurados. Arquivo existente inválido ou de versão incompatível gera erro
+sem reinicializar os dados ilustrativos.
+
+A chave da sessão é mantida em `instance/chave_sessao.key`, ou fornecida por
+`SECRET_KEY`, para preservar a identificação do navegador após reiniciar o
+servidor. `LIVRARIA_ARQUIVO_DADOS` configura outro caminho para o TXT.
+Os arquivos de execução são locais e ignorados pelo Git.
+
+## Execução e limites
+
+`create_app()` usa TXT. `create_app(arquivo_dados=None)` cria uma demonstração
+isolada em memória, e `create_app(livraria)` aceita uma dependência explícita.
+Importar a factory não cria arquivos; a aplicação pública é composta sob demanda.
+
+O escopo de concorrência cobre threads e instâncias no mesmo processo. Não há
+coordenação de gravação entre múltiplos workers. A sessão identifica o navegador
+na demonstração e não substitui autenticação de contas.
+
+O contrato e os critérios executáveis estão em [livraria.md](specs/livraria.md).
+Os resultados observados estão em [Validação Clean](validacao-clean.md).

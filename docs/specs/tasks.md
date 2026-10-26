@@ -1,8 +1,8 @@
 # Plano de implementação da livraria
 
 Este documento registra a implementação inicial. A organização atual está em
-[Arquitetura multicamadas](../arquitetura.md), e a validação da evolução está em
-[Validação multicamadas](../validacao-multicamadas.md).
+[Clean Architecture](../arquitetura.md), e a validação da evolução está em
+[Validação Clean](../validacao-clean.md).
 
 Objetivo: entregar as 30 User Stories e seus critérios de aceite usando
 exclusivamente [livraria.md](livraria.md) como especificação funcional.
